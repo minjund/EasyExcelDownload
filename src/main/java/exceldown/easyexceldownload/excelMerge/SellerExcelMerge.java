@@ -1,123 +1,129 @@
 package exceldown.easyexceldownload.excelMerge;
 
 import org.apache.poi.ss.usermodel.CellType;
-import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.util.CellRangeAddress;
 
-import java.util.ArrayList;
 import java.util.List;
 
-public class SellerExcelMerge {
+import static exceldown.easyexceldownload.excelMerge.ExcelColumnIndex.Seller;
 
-    private CellRangeAddress payment = new CellRangeAddress(0,0,0,0);
-    private CellRangeAddress leedsDiscount = new CellRangeAddress(0,0,0,0);
-    private CellRangeAddress realPayment = new CellRangeAddress(0,0,0,0);
-    private CellRangeAddress deliveryMerge = new CellRangeAddress(0,0,0,0);
+/**
+ * Excel merge handler for Seller Excel operations
+ * Handles seller-level merges with formula calculations
+ */
+public class SellerExcelMerge extends AbstractExcelMerge {
 
-    private void defaultSetting(int[] formulaCellNum, int startRowIndex, int endRowIndex) {
-        payment = new CellRangeAddress(startRowIndex, endRowIndex, formulaCellNum[0], formulaCellNum[0]);
-        leedsDiscount = new CellRangeAddress(startRowIndex, endRowIndex, formulaCellNum[1], formulaCellNum[1]);
-        realPayment = new CellRangeAddress(startRowIndex, endRowIndex, formulaCellNum[2], formulaCellNum[2]);
-        deliveryMerge = new CellRangeAddress(startRowIndex, endRowIndex, formulaCellNum[3], formulaCellNum[3]);
+    private CellRangeAddress paymentRange;
+    private CellRangeAddress leedsDiscountRange;
+    private CellRangeAddress realPaymentRange;
+    private CellRangeAddress deliveryRange;
+
+    /**
+     * Merges cells by order ID
+     */
+    public void sellerMergeValue(Sheet sheet, int totalNumberOfRows, int[] mergeCellNum,
+                                int[] formulaCellNum) {
+        mergeCellsByColumn(sheet, totalNumberOfRows, mergeCellNum, formulaCellNum,
+                          Seller.ORDER_ID);
     }
 
-    public void sellerMergeValue(Sheet sheet, int totalNumberOfRows, int[] mergeCellNum, int[] formulaCellNum) {
-        List<CellRangeAddress> mergedRegions = new ArrayList<>();
-        List<String> formulaList = new ArrayList<>();
-        int startRowIndex = 0;
-        int endRowIndex = 0;
+    @Override
+    protected void generateFormula(Sheet sheet, int[] formulaCellNum, int columnIndex,
+                                   int startRowIndex, int endRowIndex, List<String> formulaList) {
+        initializeRanges(formulaCellNum, startRowIndex, endRowIndex);
 
-        for (int i = 0; i <= totalNumberOfRows; i++) {
-            Row currentRow = sheet.getRow(i);
-            if (currentRow == null) continue; // 현재 행이 없으면 건너뜁니다.
+        String deliveryCell = getFirstCellReference(deliveryRange);
 
-            //주문번호 value
-            String orderIdValue = currentRow.getCell(0).getStringCellValue();
-            String prevOrderIdValue = i > 0 ? sheet.getRow(i - 1).getCell(0).getStringCellValue() : null;
-
-            if(orderIdValue.equals(prevOrderIdValue)) {
-                endRowIndex = i;
-            } else {
-                if(startRowIndex < endRowIndex) {
-
-                    for (int k : mergeCellNum) {
-                        CellRangeAddress range = new CellRangeAddress(startRowIndex, endRowIndex, k, k);
-                        setSellerFormula(sheet, formulaCellNum, k, startRowIndex, endRowIndex, formulaList);
-                        mergedRegions.add(range);
-                    }
-                }
-
-                if(startRowIndex > endRowIndex) {
-                    for (int k : mergeCellNum) {
-                        CellRangeAddress range = new CellRangeAddress(startRowIndex, startRowIndex, k, k);
-                        setSellerFormula(sheet, formulaCellNum, k, startRowIndex, startRowIndex, formulaList);
-                        mergedRegions.add(range);
-                    }
-                }
-
-                startRowIndex = i;
-            }
-        }
-
-        for (int i : mergeCellNum) {
-            if (startRowIndex < endRowIndex) {
-                CellRangeAddress range = new CellRangeAddress(startRowIndex, endRowIndex, i, i);
-                setSellerFormula(sheet, formulaCellNum, i, startRowIndex, endRowIndex, formulaList);
-                mergedRegions.add(range);
-            } else {
-                CellRangeAddress range = new CellRangeAddress(startRowIndex, startRowIndex, i, i);
-                setSellerFormula(sheet, formulaCellNum, i, startRowIndex, startRowIndex, formulaList);
-                mergedRegions.add(range);
-            }
-        }
-
-
-        setMergedCell(sheet, mergedRegions, formulaList);
-    }
-
-
-
-    private void setSellerFormula(Sheet sheet, int[] formulaCellNum, int k, int startRowIndex, int endRowIndex, List<String> formulaList) {
-
-        defaultSetting(formulaCellNum, startRowIndex, endRowIndex);
-
-        String deliveryText = deliveryMerge.formatAsString().split(":")[0];
-
-        generateFormula(sheet, k, startRowIndex, formulaList, deliveryText);
-    }
-
-    private void generateFormula(Sheet sheet, int k, int startRowIndex, List<String> formulaList, String deliveryText) {
-        if(k == 11){
-            formulaList.add("SUM("+ realPayment.formatAsString()+")");
-        } else if (k == 12) {
-            String leedsCouponAmount  = sheet.getRow(startRowIndex).getCell(k).getStringCellValue();
-            sheet.getRow(startRowIndex).getCell(k).setCellValue(Integer.parseInt(leedsCouponAmount));
-            sheet.getRow(startRowIndex).getCell(k).setCellType(CellType.NUMERIC);
-        } else if (k == 13) {
-            formulaList.add("(SUM("+ payment.formatAsString()+") * 11%) - SUM("+ leedsDiscount.formatAsString()+")");
-        } else if (k == 14) {
-            formulaList.add("TRUNC(((SUM("+realPayment.formatAsString()+") + " + deliveryText + ") * 2.65%),0) + ROUND(((TRUNC(((SUM("+ realPayment.formatAsString()+ ") + "+ deliveryText +") * 2.65%),0)) *10%), 0)");
-        } else if (k == 15) {
-            formulaList.add("(SUM("+ payment.formatAsString()+") * 11%) - SUM("+ leedsDiscount.formatAsString()+") + " + "TRUNC(((SUM("+realPayment.formatAsString()+") + " + deliveryText + ") * 2.65%),0) + ROUND(((TRUNC(((SUM("+ realPayment.formatAsString()+ ") + "+ deliveryText +") * 2.65%),0)) *10%), 0)");
-        } else if (k == 16) {
-            formulaList.add("SUM("+ realPayment.formatAsString()+") + " + deliveryText + " - " + "((SUM("+ payment.formatAsString()+") * 11%) - SUM("+ leedsDiscount.formatAsString()+") + " + "TRUNC(((SUM("+realPayment.formatAsString()+") + " + deliveryText + ") * 2.65%),0) + ROUND(((TRUNC(((SUM("+ realPayment.formatAsString()+ ") + "+ deliveryText +") * 2.65%),0)) *10%), 0))");
+        switch (columnIndex) {
+            case Seller.REAL_PAYMENT_SUM:
+                formulaList.add(sumFormula(realPaymentRange));
+                break;
+            case Seller.LEEDS_COUPON:
+                convertToNumeric(sheet, startRowIndex, columnIndex);
+                break;
+            case Seller.COMMISSION:
+                formulaList.add(calculateCommission());
+                break;
+            case Seller.PG_FEE:
+                formulaList.add(calculatePgFee(deliveryCell));
+                break;
+            case Seller.TOTAL_FEE:
+                formulaList.add(calculateTotalFee(deliveryCell));
+                break;
+            case Seller.SETTLEMENT:
+                formulaList.add(calculateSettlement(deliveryCell));
+                break;
         }
     }
 
-    private void setMergedCell(Sheet sheet, List<CellRangeAddress> mergedRegions, List<String> formulaList) {
-        int index = 0;
-        for (CellRangeAddress mergedRegion : mergedRegions) {
-            //단일 셀이 아닐 경우
-            if(mergedRegion.getFirstRow() != mergedRegion.getLastRow()){
-                sheet.addMergedRegion(mergedRegion);
-            }
-            // 수식 적용
-            if(mergedRegion.getFirstColumn() != 11){
-                sheet.getRow(mergedRegion.getFirstRow()).getCell(mergedRegion.getFirstColumn()).setCellFormula(formulaList.get(index));
-                index++;
-            }
+    /**
+     * Initializes cell ranges for formula calculations
+     */
+    private void initializeRanges(int[] formulaCellNum, int startRowIndex, int endRowIndex) {
+        paymentRange = createCellRange(startRowIndex, endRowIndex, formulaCellNum[0]);
+        leedsDiscountRange = createCellRange(startRowIndex, endRowIndex, formulaCellNum[1]);
+        realPaymentRange = createCellRange(startRowIndex, endRowIndex, formulaCellNum[2]);
+        deliveryRange = createCellRange(startRowIndex, endRowIndex, formulaCellNum[3]);
+    }
 
-        }
+    /**
+     * Calculates commission formula
+     */
+    private String calculateCommission() {
+        return String.format("(SUM(%s) * 11%%) - SUM(%s)",
+            formatRangeAsString(paymentRange),
+            formatRangeAsString(leedsDiscountRange));
+    }
+
+    /**
+     * Calculates PG fee formula
+     */
+    private String calculatePgFee(String deliveryCell) {
+        String baseAmount = String.format("SUM(%s) + %s",
+            formatRangeAsString(realPaymentRange), deliveryCell);
+        String pgFee = String.format("TRUNC((%s * 2.65%%),0)", baseAmount);
+        String vatOnPgFee = String.format("ROUND((%s *10%%), 0)", pgFee);
+        return String.format("%s + %s", pgFee, vatOnPgFee);
+    }
+
+    /**
+     * Calculates total fee formula (commission + PG fee)
+     */
+    private String calculateTotalFee(String deliveryCell) {
+        String commission = calculateCommission();
+        String pgFee = calculatePgFee(deliveryCell);
+        return String.format("%s + %s", commission, pgFee);
+    }
+
+    /**
+     * Calculates settlement formula
+     */
+    private String calculateSettlement(String deliveryCell) {
+        String totalAmount = String.format("SUM(%s) + %s",
+            formatRangeAsString(realPaymentRange), deliveryCell);
+        String totalFee = calculateTotalFee(deliveryCell);
+        return String.format("%s - (%s)", totalAmount, totalFee);
+    }
+
+    /**
+     * Creates a SUM formula for a cell range
+     */
+    private String sumFormula(CellRangeAddress range) {
+        return String.format("SUM(%s)", formatRangeAsString(range));
+    }
+
+    /**
+     * Converts a cell value from string to numeric type
+     */
+    private void convertToNumeric(Sheet sheet, int rowIndex, int columnIndex) {
+        String value = sheet.getRow(rowIndex).getCell(columnIndex).getStringCellValue();
+        sheet.getRow(rowIndex).getCell(columnIndex).setCellValue(Integer.parseInt(value));
+        sheet.getRow(rowIndex).getCell(columnIndex).setCellType(CellType.NUMERIC);
+    }
+
+    @Override
+    protected boolean isFormulaExcluded(int columnIndex) {
+        return columnIndex == Seller.REAL_PAYMENT_SUM;
     }
 }
